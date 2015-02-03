@@ -10,7 +10,20 @@
 #define TOTE5_PIN A4
 #define BIN_PIN A5
 
-typedef struct {
+#define N_VARS 6
+#define PERIOD 10
+/*
+0: tote1
+1: tote2
+2: tote3
+3: tote4
+4: tote5
+5: bin
+6: checksum
+7: zero
+*/
+
+/*typedef struct {
   uint8_t tote1 : 1;
   uint8_t tote2 : 1;
   uint8_t tote3 : 1;
@@ -19,33 +32,60 @@ typedef struct {
   uint8_t bin : 1;
   uint8_t checksum : 1;
   uint8_t padding : 1;
-} packet_t __attribute__ ((packed));
+} packet_t __attribute__ ((packed));*/
 
-typedef union {
+uint16_t values[N_VARS][PERIOD] = {0};
+int sums[N_VARS] = {0};
+uint8_t pins[N_VARS] = {A0, A1, A2, A3, A4, A5};
+int index = 0;
+uint8_t first = 1;
+/*typedef union {
   packet_t packet;
   uint8_t data;
-} pdata_t;
+} pdata_t;*/
 
-pdata_t pdata;
-packet_t *packet;
+//pdata_t pdata;
+//packet_t *packet;
+
 uint8_t prev_data = 0xff;
 int cutoff = (int)CUTOFF;
 void setup(){
   Serial.begin(115200);
-  packet = &pdata.packet;
 }
 
 void loop(){
 //  Serial.println((float)analogRead(TOTE2_PIN) / 1024.0 * 5);
   //return;
-  packet->tote1 = (analogRead(TOTE1_PIN) > cutoff);
+  int new_idx = index + 1;
+  if(new_idx == PERIOD){
+    new_idx = first = 0;
+  }
+  int i;
+  for(i = 0; i < N_VARS; i++){
+    sums[i] -= values[i][index];
+    int new_val = analogRead(pins[i]);
+    sums[i] += new_val;
+    values[i][new_idx] = new_val;
+  };
+  index = new_idx;
+  
+  /*packet->tote1 = (analogRead(TOTE1_PIN) > cutoff);
   packet->tote2 = (analogRead(TOTE2_PIN) > cutoff);
   packet->tote3 = (analogRead(TOTE3_PIN) > cutoff);
   packet->tote4 = (analogRead(TOTE4_PIN) > cutoff);
   packet->tote5 = (analogRead(TOTE5_PIN) > cutoff);
-  packet->bin = (analogRead(BIN_PIN) > cutoff);
-  packet->checksum = packet->tote1 ^ packet->tote2 ^ packet->tote3 ^ packet->tote4 ^ packet->tote5 ^ packet->bin;
-  uint8_t data = pdata.data;
+  packet->bin = (analogRead(BIN_PIN) > cutoff);*/
+  uint8_t checksum = 0;
+  uint8_t data = 0;
+  int denominator = first ? index : cutoff;
+  for(i = 0; i < N_VARS; i++){
+    uint8_t tmp = (sums[i] / (float)denominator) > cutoff;
+    data |= tmp;
+    checksum ^= tmp;
+    data <<= 1;
+  }
+  data |= checksum;
+
   if(data != prev_data || Serial.read() == 0xff){
     Serial.write(data);
     prev_data = data;
