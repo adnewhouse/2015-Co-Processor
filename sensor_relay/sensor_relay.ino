@@ -2,16 +2,12 @@
 
 #define ADC_VAL(voltage) (voltage*1024/5)
 #define CUTOFF ADC_VAL(0.837)
-
-#define TOTE1_PIN A0
-#define TOTE2_PIN A1
-#define TOTE3_PIN A2
-#define TOTE4_PIN A3
-#define TOTE5_PIN A4
-#define BIN_PIN A5
+#define BIN_MIN ADC_VAL(0.348)
+#define BIN_MAX ADC_VAL(0.629)
 
 #define N_VARS 6
 #define PERIOD 10
+#define N_BIN 5
 /*
 0: tote1
 1: tote2
@@ -24,13 +20,13 @@
 */
 
 /*typedef struct {
-  uint8_t tote1 : 1;
-  uint8_t tote2 : 1;
-  uint8_t tote3 : 1;
-  uint8_t tote4 : 1;
-  uint8_t tote5 : 1;
-  uint8_t bin : 1;
   uint8_t checksum : 1;
+  uint8_t bin : 1;
+  uint8_t tote5 : 1;
+  uint8_t tote4 : 1;
+  uint8_t tote3 : 1;
+  uint8_t tote2 : 1;
+  uint8_t tote1 : 1;
   uint8_t padding : 1;
 } packet_t __attribute__ ((packed));*/
 
@@ -56,18 +52,18 @@ void setup(){
 void loop(){
 //  Serial.println((float)analogRead(TOTE2_PIN) / 1024.0 * 5);
   //return;
-  int new_idx = index + 1;
-  if(new_idx == PERIOD){
-    new_idx = first = 0;
-  }
+
   int i;
   for(i = 0; i < N_VARS; i++){
     sums[i] -= values[i][index];
     int new_val = analogRead(pins[i]);
     sums[i] += new_val;
-    values[i][new_idx] = new_val;
+    values[i][index] = new_val;
   };
-  index = new_idx;
+  index++;
+  if(index == PERIOD){
+    index = first = 0;
+  }
   
   /*packet->tote1 = (analogRead(TOTE1_PIN) > cutoff);
   packet->tote2 = (analogRead(TOTE2_PIN) > cutoff);
@@ -77,16 +73,22 @@ void loop(){
   packet->bin = (analogRead(BIN_PIN) > cutoff);*/
   uint8_t checksum = 0;
   uint8_t data = 0;
-  int denominator = first ? index : cutoff;
+  int denominator = first ? index : PERIOD;
   for(i = 0; i < N_VARS; i++){
-    uint8_t tmp = (sums[i] / (float)denominator) > cutoff;
+    int avg = sums[i] / denominator;
+    uint8_t tmp = (i == N_BIN) ? (avg > BIN_MIN && avg < BIN_MAX) : avg > cutoff;
     data |= tmp;
     checksum ^= tmp;
     data <<= 1;
   }
   data |= checksum;
+  int read = Serial.read();
+  if((read & 0b00000011) == 0){
+    uint16_t hb = (read & 0b11) << 8;
+    cutoff = hb | Serial.read();
+  }
 
-  if(data != prev_data || Serial.read() == 0xff){
+  if(data != prev_data || read == 0xff){
     Serial.write(data);
     prev_data = data;
   }
