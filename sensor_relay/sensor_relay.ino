@@ -27,6 +27,11 @@ typedef struct {
   uint16_t values[PERIOD];
 } sensor_t;
 
+typedef struct {
+  uint16_t min;
+  uint16_t max;
+} eedata_t;
+
 sensor_t sensors[N_SENSORS];
 
 void init_sensor(int n, int pin, uint16_t min, uint16_t max){
@@ -39,6 +44,37 @@ void init_sensor(int n, int pin, uint16_t min, uint16_t max){
   for(i = 0; i < PERIOD; i++){
     sensor->values[i] = 0;
   }
+}
+
+void eeprom_read(uint8_t *buf, int addr, int n){
+  int i;
+  for(i = 0; i < n; i++){
+    buf[i] = EEPROM.read(addr + i);
+  }
+}
+
+void eeprom_write(uint8_t *buf, int addr, int n){
+  int i;
+  for(i = 0; i < n; i++){
+    EEPROM.write(addr + i, buf[i]);
+  }
+}
+
+void load_sensors(){
+  int i;
+  eedata_t tmp;
+  for(i = 0; i < N_SENSORS; i++){
+    eeprom_read((uint8_t *)(&tmp), i * sizeof(eedata_t), sizeof(eedata_t));
+    sensors[i].min = tmp.min;
+    sensors[i].max = tmp.max;
+  }
+}
+
+void save_sensor(sensor_t *sensor, int n){
+  eedata_t tmp;
+  tmp.min = sensor->min;
+  tmp.max = sensor->max;
+  eeprom_write((uint8_t *)sensor, n * sizeof(eedata_t), sizeof(eedata_t));
 }
 
 void init_tote(int n, int pin){
@@ -97,6 +133,7 @@ void loop(){
     sensor_t *sensor = SENSOR(sensor_n);
     if(is_max) sensor->max = new_adc;
     else sensor->min = new_adc;
+    save_sensor(sensor, sensor_n);
   }
 
   if(data != prev_data || read == 0xff){
