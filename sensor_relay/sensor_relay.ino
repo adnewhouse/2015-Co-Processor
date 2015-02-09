@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <avr/eeprom.h>
 
 #define ADC_VAL(voltage) (voltage*1024/5)
 #define CUTOFF ADC_VAL(0.837)
@@ -33,11 +34,13 @@ typedef struct {
 } eedata_t;
 
 sensor_t sensors[N_SENSORS];
+eedata_t EEMEM eedata[N_SENSORS];
+eedata_t ram_eedata[N_SENSORS];
 
-void init_sensor(int n, int pin, uint16_t min, uint16_t max){
+void init_sensor(int n, int pin){
   sensor_t *sensor = SENSOR(n);
-  sensor->min = min;
-  sensor->max = max;
+//  sensor->min = min;
+//  sensor->max = max;
   sensor->sum = 0;
   sensor->pin = pin;
   int i;
@@ -46,39 +49,18 @@ void init_sensor(int n, int pin, uint16_t min, uint16_t max){
   }
 }
 
-void eeprom_read(uint8_t *buf, int addr, int n){
-  int i;
-  for(i = 0; i < n; i++){
-    buf[i] = EEPROM.read(addr + i);
-  }
-}
-
-void eeprom_write(uint8_t *buf, int addr, int n){
-  int i;
-  for(i = 0; i < n; i++){
-    EEPROM.write(addr + i, buf[i]);
-  }
-}
-
 void load_sensors(){
+  eeprom_read_block(ram_eedata, eedata, sizeof(eedata_t) * N_SENSORS);
   int i;
-  eedata_t tmp;
   for(i = 0; i < N_SENSORS; i++){
-    eeprom_read((uint8_t *)(&tmp), i * sizeof(eedata_t), sizeof(eedata_t));
-    sensors[i].min = tmp.min;
-    sensors[i].max = tmp.max;
+    sensors[i].min = ram_eedata[i].min;
+    sensors[i].max = ram_eedata[i].max;
   }
 }
-
-void save_sensor(sensor_t *sensor, int n){
-  eedata_t tmp;
-  tmp.min = sensor->min;
-  tmp.max = sensor->max;
-  eeprom_write((uint8_t *)sensor, n * sizeof(eedata_t), sizeof(eedata_t));
-}
-
-void init_tote(int n, int pin){
-  init_sensor(n, pin, CUTOFF, 1023);
+void store_sensor(int n){
+  ram_eedata[n].min = sensors[n].min;
+  ram_eedata[n].max = sensors[n].max;
+  eeprom_write_block((ram_eedata + n), (eedata + n), sizeof(eedata_t));
 }
 
 int index = 0;
@@ -87,12 +69,19 @@ uint8_t first = 1;
 uint8_t prev_data = 0xff;
 void setup(){
   Serial.begin(115200);
-  init_tote(0, A0);
-  init_tote(1, A1);
-  init_tote(2, A2);
-  init_tote(3, A3);
-  init_tote(4, A4);
-  init_sensor(5, A5, BIN_MIN, BIN_MAX);
+  init_sensor(0, A0);
+  init_sensor(1, A1);
+  init_sensor(2, A2);
+  init_sensor(3, A3);
+  init_sensor(4, A4);
+  init_sensor(5, A5);
+  load_sensors();
+  int i;
+  for(i = 0; i < N_SENSORS; i++){
+    Serial.print(sensors[i].min);
+    Serial.write(' ');
+    Serial.println(sensors[i].max);
+  }
 /*  digitalWrite(A1, HIGH);
   digitalWrite(A2, HIGH);
   digitalWrite(A3, HIGH);
@@ -128,16 +117,22 @@ void loop(){
   int read = Serial.read();
   if(read != 0xff && read >= 0){
     uint8_t sensor_n = (read >> 2) & 0b11111;
-    uint16_t new_adc = ((read & 0b11) << 8) | Serial.read();
-    uint8_t is_max = read & 0b10000000;
+    uint8_t b2 = Serial.read();
+    uint16_t new_adc = ((read & 0b11) << 8) | b2;
+    uint8_t is_max = read >> 7;
+    
+ //   Serial.println(sensor_n);
+   // Serial.println(new_adc);
     sensor_t *sensor = SENSOR(sensor_n);
-    if(is_max) sensor->max = new_adc;
-    else sensor->min = new_adc;
-    save_sensor(sensor, sensor_n);
+    if(is_max) sensor->max = ram_eedata[sensor_n].max = new_adc;
+    else sensor->min = ram_eedata[sensor_n].min = new_adc;
+    store_sensor(sensor_n);
   }
-
+//  Serial.print(sensors[0].min);
+//  Serial.write(' ');
+//  Serial.println(sensors[0].max);
   if(data != prev_data || read == 0xff){
-    Serial.write(data);
+    //Serial.write(data);
     prev_data = data;
   }
 }
