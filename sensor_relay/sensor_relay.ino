@@ -77,11 +77,6 @@ void setup(){
   init_sensor(5, A5);
   load_sensors();
   int i;
-  for(i = 0; i < N_SENSORS; i++){
-    Serial.print(sensors[i].min);
-    Serial.write(' ');
-    Serial.println(sensors[i].max);
-  }
 /*  digitalWrite(A1, HIGH);
   digitalWrite(A2, HIGH);
   digitalWrite(A3, HIGH);
@@ -115,24 +110,23 @@ void loop(){
   }
   data |= checksum << N_SENSORS;
   int read = Serial.read();
-  if(read != 0xff && read >= 0){
+  if(read == 0xff){}
+  else if(read == 0xfe){
+    Serial.write((char *)ram_eedata, sizeof(eedata_t) * N_SENSORS);
+  }else if(read >= 0){
     uint8_t sensor_n = (read >> 2) & 0b11111;
+    delay(10);
     uint8_t b2 = Serial.read();
     uint16_t new_adc = ((read & 0b11) << 8) | b2;
     uint8_t is_max = read >> 7;
-    
- //   Serial.println(sensor_n);
-   // Serial.println(new_adc);
     sensor_t *sensor = SENSOR(sensor_n);
     if(is_max) sensor->max = ram_eedata[sensor_n].max = new_adc;
     else sensor->min = ram_eedata[sensor_n].min = new_adc;
     store_sensor(sensor_n);
   }
-//  Serial.print(sensors[0].min);
-//  Serial.write(' ');
-//  Serial.println(sensors[0].max);
+  
   if(data != prev_data || read == 0xff){
-    //Serial.write(data);
+    Serial.write(data);
     prev_data = data;
   }
 }

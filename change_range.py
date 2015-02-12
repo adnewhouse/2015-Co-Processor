@@ -3,9 +3,12 @@ import sys
 import argparse
 
 def adc_val(voltage): return int(voltage * 1024) // 5
-default_cutoff = adc_val(0.837)
-bin_min = adc_val(0.348)
-bin_max = adc_val(0.629)
+def sr_cm(cm): return adc_val(10.6832 * cm**-0.9407)
+def lr_cm(cm): return adc_val(-0.05*cm + 3.5177 if cm <= 40 else 47.6959 * cm**-0.9334)
+f_table = dict(v=adc_val, s=sr_cm, l=lr_cm)
+default_cutoff = sr_cm(15)
+bin_min = lr_cm(38)
+bin_max = lr_cm(20)
 dry_run = False
 def gen_cmd(which, n, val):
     v1 = which << 7
@@ -37,7 +40,7 @@ parser.add_argument('--port', dest='port', default='/dev/ttyACM0', help='Serial 
 parser.add_argument('--baud', dest='baud', default=115200, type=int, help='Baud rate to use')
 parser.add_argument('--dry', dest='dry', action='store_true', help='Just print bytes that would have been sent')
 args = parser.parse_args()
-print(args.dry)
+#print(args.dry)
 dry_run = args.dry
 
 ser = serial.Serial(args.port, args.baud)
@@ -50,6 +53,8 @@ if args.defaults:
         set_both(i, default_cutoff, 1023)
     set_both(5, bin_min, bin_max)
 else:
+    if args.min[1] == ':': args.min = f_table[args.min[0]](args.min)
+    if args.max[1] == ':': args.max = f_table[args.max[0]](args.max)
     if args.min is not None:
         set_min(args.sensor, args.min)
     if args.max is not None:
