@@ -11,9 +11,9 @@ bin_min = lr_cm(38)
 bin_max = lr_cm(20)
 dry_run = False
 def gen_cmd(which, n, val):
-    v1 = which << 7
+    v1 = (which & 1) << 7
     v1 |= (n & 0b11111) << 2
-    v1 |= val >> 8
+    v1 |= (val >> 8) & 0b11
     v2 = val & 0xff
     return bytes([v1, v2])
 def print_bin(f):
@@ -30,12 +30,15 @@ def set_max(n, val):
 def set_both(n, min=0, max=1023):
     set_min(n, min)
     set_max(n, max)
+def parse_val(s):
+    if s[1] == ':': return f_table[s[0]](int(s[2:]))
+    else: return int(s)
 
 parser = argparse.ArgumentParser(description='Store min and max sensor values in arduino eeprom')
 parser.add_argument('--defaults|-d', dest='defaults', action='store_true', help='Restore defaults')
 parser.add_argument('--sensor|-s', dest='sensor', type=int, help='Sensor number')
-parser.add_argument('--min', dest='min', type=int, help='Minimum value')
-parser.add_argument('--max', dest='max', type=int, help='Maximum value')
+parser.add_argument('--min', dest='min', help='Minimum value')
+parser.add_argument('--max', dest='max', help='Maximum value')
 parser.add_argument('--port', dest='port', default='/dev/ttyACM0', help='Serial port to use')
 parser.add_argument('--baud', dest='baud', default=115200, type=int, help='Baud rate to use')
 parser.add_argument('--dry', dest='dry', action='store_true', help='Just print bytes that would have been sent')
@@ -53,9 +56,9 @@ if args.defaults:
         set_both(i, default_cutoff, 1023)
     set_both(5, bin_min, bin_max)
 else:
-    if args.min[1] == ':': args.min = f_table[args.min[0]](args.min)
-    if args.max[1] == ':': args.max = f_table[args.max[0]](args.max)
     if args.min is not None:
+        args.min = parse_val(args.min)
         set_min(args.sensor, args.min)
     if args.max is not None:
+        args.max = parse_val(args.max)
         set_max(args.sensor, args.max)
